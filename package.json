@@ -12,7 +12,7 @@
     "dist": "npm run build && electron-builder --win"
   },
   "keywords": [],
-  "author": "DevSweep Contributors",
+  "author": "Mujahid Afridi (Afridi Labz)",
   "license": "ISC",
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

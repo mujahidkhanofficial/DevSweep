@@ -7,6 +7,8 @@
 ### Developer-Focused Windows Disk Cleanup & Storage Intelligence
 *Clean developer caches. Reclaim tens of gigabytes. Zero risk to active projects.*
 
+**Developed by [Mujahid Afridi](https://github.com/mujahidkhanofficial) • [Afridi Labz](https://github.com/mujahidkhanofficial)**
+
 [![Tests](https://img.shields.io/badge/tests-224%20passing-emerald?style=flat-square)](tests/)
 [![Electron](https://img.shields.io/badge/Electron-41.7.1-blue?style=flat-square&logo=electron)](https://www.electronjs.org/)
 [![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react)](https://react.dev/)
@@ -150,7 +152,16 @@ DevSweep/
 3. **Data Loss Prevention**: Uninstallation policies explicitly preserve your historical audit trails and custom settings in `%APPDATA%\DevSweep`.
 
 ---
+ 
+## 👨‍💻 Author & Organization
+
+Developed and maintained by **Mujahid Afridi** at **Afridi Labz**.
+- **Creator & Lead Developer**: [Mujahid Afridi](https://github.com/mujahidkhanofficial)
+- **Organization**: Afridi Labz
+- **GitHub Repository**: [github.com/mujahidkhanofficial/DevSweep](https://github.com/mujahidkhanofficial/DevSweep)
+
+---
 
 ## 📄 License
 
-DevSweep is released under the **ISC License**. Copyright © 2026 DevSweep Contributors.
+DevSweep is released under the **ISC License**. Copyright © 2026 Mujahid Afridi, Afridi Labz.
