@@ -458,9 +458,9 @@ export const CleanupView: React.FC = () => {
         {/* Top Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-4 rounded-xl border border-border shadow-xs">
           <div>
-            <h1 className="text-sm font-bold text-foreground tracking-tight">Cleanup Candidates</h1>
+            <h1 className="text-sm font-bold text-foreground tracking-tight">Cleanable Files & Caches</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Review and select developer caches to safely reclaim storage.
+              Select which temporary files and caches you want to delete to free up disk space.
             </p>
           </div>
 
@@ -886,7 +886,7 @@ export const CleanupView: React.FC = () => {
                 onChange={(e) => setDryRun(e.target.checked)}
                 className="rounded border-border text-primary cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-hidden"
               />
-              <span>Dry Run Simulation</span>
+              <span>Preview (Test run without deleting files)</span>
             </label>
 
             <button
@@ -896,7 +896,7 @@ export const CleanupView: React.FC = () => {
               className="flex items-center space-x-1.5 px-5 py-2 rounded-lg bg-destructive hover:bg-destructive/90 text-destructive-foreground text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-destructive focus-visible:outline-hidden"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>{dryRun ? 'Simulate Deletion' : 'Clean Selected Space'}</span>
+              <span>{dryRun ? 'Test Run (No Files Deleted)' : 'Clean Selected Space'}</span>
             </button>
           </div>
         </div>

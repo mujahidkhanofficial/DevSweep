@@ -92,9 +92,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onStartScan, onNav
       {/* Top Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-foreground tracking-tight">System Drive & Developer Storage</h1>
+          <h1 className="text-xl font-bold text-foreground tracking-tight">System Drives & Storage</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Identify safe reclaimable space without risk to active source code.
+            Find temporary and junk files you can safely clean without touching your work.
           </p>
         </div>
 
@@ -238,26 +238,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onStartScan, onNav
             {scanState === 'SCANNED_EMPTY' ? (
               <div className="flex items-center space-x-1.5 text-emerald-400 font-bold">
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Toolchains Pristine & Clean</span>
+                <span>Everything Clean & Tidy</span>
               </div>
             ) : (
               <div className="flex items-center space-x-1.5 text-primary">
                 <Sparkles className="w-4 h-4" />
-                <span>Developer Cache Analysis</span>
+                <span>Temporary File Analysis</span>
               </div>
             )}
           </div>
           <h2 className="text-lg font-bold text-foreground">
             {scanState === 'SCANNED_WITH_CANDIDATES'
-              ? `${formatBytes(totalScannedBytes)} Potentially Recoverable`
+              ? `${formatBytes(totalScannedBytes)} Ready to Clean`
               : scanState === 'SCANNED_EMPTY'
-              ? 'Zero Developer Clutter Found'
-              : 'Analyze Developer Caches & Waste'}
+              ? 'No Junk Files Found'
+              : 'Scan for Temporary Files & Caches'}
           </h2>
           <p className="text-xs text-muted-foreground max-w-lg">
             {scanState === 'SCANNED_EMPTY'
-              ? 'Your active developer caches are clean, lean, and optimal. DevSweep detected zero redundant build artifacts or expired package caches.'
-              : 'Scan safe developer locations (npm, Gradle, Pub, IDE caches, Windows temp) without touching repositories or .env secrets.'}
+              ? 'Your storage is clean and optimal. DevSweep detected zero redundant temporary files or expired caches.'
+              : 'Scan safe temporary locations (app caches, build leftovers, and Windows temp) without touching your personal files or projects.'}
           </p>
         </div>
 
@@ -268,7 +268,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onStartScan, onNav
               onClick={onNavigateToCleanup}
               className="px-4 py-2.5 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground text-xs font-medium border border-border transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-hidden"
             >
-              Review Results ({items.length})
+              Review Files ({items.length})
             </button>
           )}
 
@@ -279,7 +279,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onStartScan, onNav
             className="flex items-center space-x-2 px-5 py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow-md shadow-primary/20 transition-all cursor-pointer disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-hidden"
           >
             <Sparkles className="w-4 h-4" />
-            <span>{isScanning ? 'Scanning...' : scanState === 'SCANNED_EMPTY' ? 'Run Another Scan' : 'Smart Scan'}</span>
+            <span>{isScanning ? 'Scanning...' : scanState === 'SCANNED_EMPTY' ? 'Run Another Scan' : 'Start Scan'}</span>
           </button>
         </div>
       </div>
@@ -288,7 +288,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onStartScan, onNav
       <div className="space-y-3">
         <div className="flex items-center space-x-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           <Layers className="w-3.5 h-3.5" />
-          <span>Detected Developer Toolchains</span>
+          <span>Detected Apps & Tools</span>
         </div>
 
         {loading && environments.length === 0 ? (
@@ -313,7 +313,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onStartScan, onNav
           </div>
         ) : environments.length === 0 ? (
           <div className="p-6 text-center bg-card rounded-xl border border-border text-xs text-muted-foreground">
-            No developer toolchains detected in standard Windows PATH locations. DevSweep will still clean system temporary data and editor caches.
+            No specialized development tools detected. DevSweep will still clean system temporary files, browser, and editor caches.
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
@@ -362,17 +362,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onStartScan, onNav
                   {/* Intelligence summary */}
                   <div className="pt-1.5 border-t border-border/50 text-[11px]">
                     {scanState === 'NOT_SCANNED' ? (
-                      <span className="text-muted-foreground text-[10px] block leading-tight">Scan required</span>
+                      <span className="text-muted-foreground text-[10px] block leading-tight">Needs scan</span>
                     ) : stats.count > 0 ? (
                       <div>
                         <span className="font-bold text-foreground block">{formatBytes(stats.bytes)}</span>
                         <span className="text-[10px] text-muted-foreground">
-                          {stats.count} candidate{stats.count === 1 ? '' : 's'}
+                          {stats.count} cleanable item{stats.count === 1 ? '' : 's'}
                         </span>
                       </div>
                     ) : (
                       <span className="text-muted-foreground text-[10px] block leading-tight">
-                        No cleanup candidates detected
+                        No temporary files found
                       </span>
                     )}
                   </div>
@@ -444,25 +444,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onStartScan, onNav
               {/* Scan & Candidates Details */}
               <div className="space-y-2">
                 <span className="font-semibold uppercase tracking-wider text-[10px] text-muted-foreground">
-                  Cleanup Intelligence
+                  Cleaning Overview
                 </span>
 
                 {scanState === 'NOT_SCANNED' ? (
                   <div className="p-3.5 rounded-lg bg-secondary/20 border border-border text-center space-y-2">
                     <Info className="w-4 h-4 text-primary mx-auto" />
                     <p className="text-muted-foreground text-[11px] leading-relaxed">
-                      Scan required. Run Smart Scan to discover {env.name} caches and build artifacts.
+                      Scan needed. Start a scan to discover {env.name} temporary files and caches.
                     </p>
                   </div>
                 ) : stats.count > 0 ? (
                   <div className="space-y-2.5">
                     <div className="grid grid-cols-2 gap-2 text-center">
                       <div className="p-2.5 rounded-lg bg-secondary/30 border border-border">
-                        <span className="text-muted-foreground text-[10px] block">Cleanup Candidates</span>
+                        <span className="text-muted-foreground text-[10px] block">Cleanable Files</span>
                         <span className="text-sm font-bold text-foreground">{stats.count}</span>
                       </div>
                       <div className="p-2.5 rounded-lg bg-secondary/30 border border-border">
-                        <span className="text-muted-foreground text-[10px] block">Reclaimable Space</span>
+                        <span className="text-muted-foreground text-[10px] block">Space to Free</span>
                         <span className="text-sm font-bold text-foreground">{formatBytes(stats.bytes)}</span>
                       </div>
                     </div>
@@ -470,7 +470,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onStartScan, onNav
                     {/* Detected cache locations found in scan */}
                     <div className="space-y-1.5 pt-1">
                       <span className="text-[11px] font-medium text-foreground block">
-                        Detected Cache Locations ({stats.candidates.length}):
+                        Temporary Cache Locations ({stats.candidates.length}):
                       </span>
                       <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
                         {stats.candidates.map((c) => (
@@ -493,7 +493,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onStartScan, onNav
                 ) : (
                   <div className="p-3.5 rounded-lg bg-secondary/20 border border-border text-center space-y-1">
                     <p className="text-muted-foreground text-[11px]">
-                      No reclaimable {env.name} data was found in the current scan.
+                      No temporary {env.name} files found in the current scan.
                     </p>
                   </div>
                 )}
@@ -510,14 +510,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onStartScan, onNav
                     className="flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow-xs transition-colors cursor-pointer"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>Launch Smart Scan</span>
+                    <span>Start Cleaning Scan</span>
                   </button>
                 ) : stats.count > 0 ? (
                   <button
                     onClick={handleReviewInCleanup}
                     className="flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow-xs transition-colors cursor-pointer"
                   >
-                    <span>Review in Cleanup</span>
+                    <span>View in Cleanup</span>
                     <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                 ) : (

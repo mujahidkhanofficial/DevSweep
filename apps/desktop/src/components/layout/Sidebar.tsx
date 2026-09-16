@@ -66,10 +66,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, candid
       <div className="p-2.5 rounded-lg bg-secondary/50 border border-border/50 text-[11px] space-y-1 text-muted-foreground">
         <div className="flex items-center space-x-1.5 text-foreground font-medium">
           <ShieldCheck className="w-3.5 h-3.5 text-safety-safe" />
-          <span>Safety Engine Active</span>
+          <span>Safety Protection Active</span>
         </div>
         <p className="text-[10px] leading-tight text-muted-foreground">
-          Repositories, credentials & system roots immuned.
+          Important files, documents & projects are kept safe.
         </p>
       </div>
     </aside>

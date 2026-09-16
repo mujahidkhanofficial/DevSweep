@@ -5,7 +5,6 @@ import {
   AlertCircle,
   Trash2,
   Clock,
-  Download,
   FileSpreadsheet,
   FileJson,
   CheckCircle2,
@@ -26,6 +25,64 @@ export function maskPathPII(text: string): string {
   return text
     .replace(/([A-Za-z]:[\\/]Users[\\/])[^\\/\s"']+/gi, '$1***')
     .replace(/(\/home\/)[^/\s"']+/gi, '$1***');
+}
+
+interface ParsedAuditItem {
+  type: 'SAFEGUARD' | 'IN_USE' | 'PERMISSION' | 'SKIPPED';
+  badgeStyle: string;
+  badgeLabel: string;
+  message: string;
+  targetPath?: string;
+}
+
+function parseAuditReason(rawReason: string, fallbackPath: string): ParsedAuditItem {
+  const maskedReason = maskPathPII(rawReason || '');
+  const maskedPath = maskPathPII(fallbackPath || '');
+
+  let extractedPath = maskedPath;
+
+  const pathMatch = maskedReason.match(/Path:\s*"([^"]+)"|Path\s+escaped.*?root\s*"([^"]+)"|Path:\s*(\S+)/i);
+  if (pathMatch) {
+    extractedPath = pathMatch[1] || pathMatch[2] || pathMatch[3] || extractedPath;
+  }
+
+  if (/RULE_PROTECTED|policy violation|escaped the approved/i.test(maskedReason)) {
+    return {
+      type: 'SAFEGUARD',
+      badgeStyle: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
+      badgeLabel: 'SAFEGUARD',
+      message: 'Kept safe: Outside the approved cleaning folder',
+      targetPath: extractedPath
+    };
+  }
+
+  if (/EBUSY|File is in use|locked by/i.test(maskedReason)) {
+    return {
+      type: 'IN_USE',
+      badgeStyle: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+      badgeLabel: 'IN USE',
+      message: 'Currently open or in use by Windows or another app',
+      targetPath: extractedPath
+    };
+  }
+
+  if (/EPERM|access denied|permission denied/i.test(maskedReason)) {
+    return {
+      type: 'PERMISSION',
+      badgeStyle: 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+      badgeLabel: 'PERMISSION',
+      message: 'Administrator permission needed to remove this file',
+      targetPath: extractedPath
+    };
+  }
+
+  return {
+    type: 'SKIPPED',
+    badgeStyle: 'bg-secondary text-muted-foreground border-border',
+    badgeLabel: 'SKIPPED',
+    message: 'Skipped safely during cleaning',
+    targetPath: extractedPath
+  };
 }
 
 export const HistoryView: React.FC = () => {
@@ -101,12 +158,12 @@ export const HistoryView: React.FC = () => {
       if (res?.success) {
         setExportFeedback({
           type: 'success',
-          message: `Audit exported successfully (${format.toUpperCase()}).`
+          message: `Cleanup history saved successfully (${format.toUpperCase()}).`
         });
       } else {
         setExportFeedback({
           type: 'error',
-          message: res?.error ? normalizeError(res.error) : 'Could not export audit history.'
+          message: res?.error ? normalizeError(res.error) : 'Could not save cleanup history.'
         });
       }
     } catch (err) {
@@ -128,13 +185,13 @@ export const HistoryView: React.FC = () => {
           type: 'success',
           message:
             res.prunedCount && res.prunedCount > 0
-              ? `Pruned ${res.prunedCount} record${res.prunedCount > 1 ? 's' : ''} according to retention settings.`
-              : 'History already conforms to your retention policy. No records pruned.'
+              ? `Removed ${res.prunedCount} older record${res.prunedCount > 1 ? 's' : ''} to keep history clean.`
+              : 'Your history is already up to date. No old records needed removal.'
         });
       } else {
         setExportFeedback({
           type: 'error',
-          message: res.error || 'Could not prune history.'
+          message: res.error || 'Could not clean up old history.'
         });
       }
     } finally {
@@ -150,7 +207,7 @@ export const HistoryView: React.FC = () => {
       if (res.success) {
         setExportFeedback({
           type: 'success',
-          message: `Cleared all ${res.clearedCount || 0} historical audit record${res.clearedCount === 1 ? '' : 's'}.`
+          message: `Cleared all ${res.clearedCount || 0} history record${res.clearedCount === 1 ? '' : 's'}.`
         });
       } else {
         setExportFeedback({
@@ -167,65 +224,59 @@ export const HistoryView: React.FC = () => {
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Cleanup Audit & History</h1>
+          <h1 className="text-xl font-bold text-foreground">Cleanup History</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Local audit records of all previous cleanup transactions and space reclaimed.
+            Review past cleanups, freed storage space, and protected files.
           </p>
         </div>
+      </div>
 
-        <div className="flex items-center gap-3">
-          {/* Export & Retention Action Buttons */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => handleExport('json')}
-              disabled={transactions.length === 0 || exporting || actionInProgress}
-              className="px-3 py-2 bg-secondary/80 hover:bg-secondary text-foreground text-xs font-medium rounded-lg border border-border flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-hidden"
-              title="Export history audit trail as versioned JSON"
-            >
-              <FileJson className="w-4 h-4 text-primary" />
-              <span>Export JSON</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleExport('csv')}
-              disabled={transactions.length === 0 || exporting || actionInProgress}
-              className="px-3 py-2 bg-secondary/80 hover:bg-secondary text-foreground text-xs font-medium rounded-lg border border-border flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-hidden"
-              title="Export history audit trail as RFC-4180 CSV"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-              <span>Export CSV</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmModal('prune')}
-              disabled={transactions.length === 0 || exporting || actionInProgress}
-              className="px-3 py-2 bg-secondary/80 hover:bg-secondary text-foreground text-xs font-medium rounded-lg border border-border flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-hidden"
-              title="Prune history older than configured retention period"
-            >
-              <Scissors className="w-4 h-4 text-amber-400" />
-              <span>Prune</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmModal('clear')}
-              disabled={transactions.length === 0 || exporting || actionInProgress}
-              className="px-3 py-2 bg-destructive/10 hover:bg-destructive/20 text-destructive text-xs font-medium rounded-lg border border-destructive/20 flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer focus-visible:ring-2 focus-visible:ring-destructive focus-visible:outline-hidden"
-              title="Permanently remove stored history records"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Clear</span>
-            </button>
+      {/* Metric Summary Strip */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+        <div className="p-4 rounded-xl bg-card border border-border shadow-xs flex items-center space-x-3.5">
+          <div className="p-2.5 rounded-lg bg-safety-safe/10 text-safety-safe border border-safety-safe/20 shrink-0">
+            <ShieldCheck className="w-5 h-5" />
           </div>
+          <div className="min-w-0">
+            <span className="text-[11px] font-medium text-muted-foreground block truncate">Total Space Freed</span>
+            <span className="text-lg font-bold text-foreground tracking-tight block">
+              {formatBytes(totalReclaimedLifetime)}
+            </span>
+            <span className="text-[10px] text-muted-foreground/80 block truncate mt-0.5">
+              Cleaned across all sessions
+            </span>
+          </div>
+        </div>
 
-          <div className="p-3 bg-secondary/50 border border-border rounded-xl flex items-center space-x-3 text-xs">
-            <ShieldCheck className="w-5 h-5 text-safety-safe" />
-            <div>
-              <span className="text-[10px] text-muted-foreground block">Lifetime Reclaimed Space</span>
-              <span className="font-bold text-foreground text-sm">{formatBytes(totalReclaimedLifetime)}</span>
-            </div>
+        <div className="p-4 rounded-xl bg-card border border-border shadow-xs flex items-center space-x-3.5">
+          <div className="p-2.5 rounded-lg bg-primary/10 text-primary border border-primary/20 shrink-0">
+            <History className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <span className="text-[11px] font-medium text-muted-foreground block truncate">Cleanups Done</span>
+            <span className="text-lg font-bold text-foreground tracking-tight block">
+              {transactions.length} Total Cleanup{transactions.length === 1 ? '' : 's'}
+            </span>
+            <span className="text-[10px] text-muted-foreground/80 block truncate mt-0.5">
+              {completedCount} completed · {partialCount} partly cleaned · {failedCount} stopped
+            </span>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-xl bg-card border border-border shadow-xs flex items-center space-x-3.5">
+          <div className="p-2.5 rounded-lg bg-secondary text-muted-foreground border border-border shrink-0">
+            <Clock className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <span className="text-[11px] font-medium text-muted-foreground block truncate">Safety Protection</span>
+            <span className="text-lg font-bold text-foreground tracking-tight block">
+              Safety Shield Active
+            </span>
+            <span className="text-[10px] text-muted-foreground/80 block truncate mt-0.5">
+              Essential files kept safe · Keeps list tidy
+            </span>
           </div>
         </div>
       </div>
@@ -246,12 +297,12 @@ export const HistoryView: React.FC = () => {
                 {confirmModal === 'prune' ? (
                   <>
                     <Scissors className="w-5 h-5 text-amber-400" />
-                    <span>Prune Audit History</span>
+                    <span>Clean Up Old History</span>
                   </>
                 ) : (
                   <>
                     <Trash2 className="w-5 h-5 text-destructive" />
-                    <span>Clear Audit History</span>
+                    <span>Clear All History</span>
                   </>
                 )}
               </h3>
@@ -269,13 +320,13 @@ export const HistoryView: React.FC = () => {
             <p className="text-xs text-muted-foreground leading-relaxed">
               {confirmModal === 'prune' ? (
                 <>
-                  This will remove historical records that exceed your configured retention policy (age and maximum count limits). Records with uninterpretable timestamps are safely kept.
+                  This removes older cleanup records to keep your list organized and save storage space. Your most recent cleanup records will remain safely saved.
                 </>
               ) : (
                 <>
-                  Permanently remove all stored audit history records? <br />
+                  Remove all past cleanup records from this list? <br />
                   <strong className="text-foreground block mt-1">
-                    This affects stored audit logs only. It does not delete downloaded/developer files or exported audit files.
+                    This only removes the log history. It will NOT delete your actual files, projects, or saved reports.
                   </strong>
                 </>
               )}
@@ -301,14 +352,14 @@ export const HistoryView: React.FC = () => {
                     : 'bg-destructive hover:bg-destructive/90 focus-visible:ring-destructive'
                 }`}
               >
-                {confirmModal === 'prune' ? 'Confirm Prune' : 'Confirm Clear All'}
+                {confirmModal === 'prune' ? 'Clean Up Old Records' : 'Clear All History'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Export Status Feedback */}
+      {/* Status Feedback */}
       {exportFeedback && (
         <div
           role={exportFeedback.type === 'error' ? 'alert' : 'status'}
@@ -346,7 +397,7 @@ export const HistoryView: React.FC = () => {
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 text-destructive" />
             <div>
-              <span className="font-semibold block">Failed to load history</span>
+              <span className="font-semibold block">Couldn't load cleanup history</span>
               <span>{error}</span>
             </div>
           </div>
@@ -359,38 +410,88 @@ export const HistoryView: React.FC = () => {
             className="px-3 py-1.5 bg-destructive/20 hover:bg-destructive/30 font-medium rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-destructive focus-visible:outline-hidden"
           >
             <RotateCw className="w-3.5 h-3.5" />
-            <span>Retry</span>
+            <span>Try Again</span>
           </button>
         </div>
       )}
 
-      {/* Status Filter Toolbar */}
-      {transactions.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5" role="toolbar" aria-label="Filter audit records by status">
+      {/* Action & Filter Toolbar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+        {/* Status Filter Segmented Control */}
+        <div
+          className="inline-flex items-center p-1 rounded-lg bg-secondary/40 border border-border/60 gap-1"
+          role="toolbar"
+          aria-label="Filter cleanup records by status"
+        >
           {(
             [
               { key: 'ALL', label: 'All', count: transactions.length },
               { key: 'COMPLETED', label: 'Completed', count: completedCount },
-              { key: 'PARTIAL', label: 'Partial', count: partialCount },
-              { key: 'FAILED', label: 'Failed', count: failedCount }
+              { key: 'PARTIAL', label: 'Partly Cleaned', count: partialCount },
+              { key: 'FAILED', label: 'Stopped', count: failedCount }
             ] as const
           ).map((tab) => (
             <button
               key={tab.key}
               type="button"
               onClick={() => setStatusFilter(tab.key)}
-              className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-hidden ${
+              className={`px-3 py-1 text-xs rounded-md font-medium transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-hidden ${
                 statusFilter === tab.key
-                  ? 'bg-primary text-primary-foreground shadow-xs'
-                  : 'bg-secondary/40 text-muted-foreground hover:bg-secondary/70 hover:text-foreground'
+                  ? 'bg-primary text-primary-foreground shadow-xs font-semibold'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
               }`}
               aria-pressed={statusFilter === tab.key}
             >
-              {tab.label} <span className="opacity-70 text-[10px]">({tab.count})</span>
+              {tab.label} <span className="text-[10px] opacity-75">({tab.count})</span>
             </button>
           ))}
         </div>
-      )}
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          <button
+            type="button"
+            onClick={() => handleExport('json')}
+            disabled={transactions.length === 0 || exporting || actionInProgress}
+            className="h-8 px-3 bg-secondary/60 hover:bg-secondary text-foreground text-xs font-medium rounded-lg border border-border inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-hidden"
+            title="Save cleanup history as a JSON file"
+          >
+            <FileJson className="w-3.5 h-3.5 text-primary" />
+            <span>Save JSON</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleExport('csv')}
+            disabled={transactions.length === 0 || exporting || actionInProgress}
+            className="h-8 px-3 bg-secondary/60 hover:bg-secondary text-foreground text-xs font-medium rounded-lg border border-border inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-hidden"
+            title="Save cleanup history as an Excel/CSV spreadsheet"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Save CSV</span>
+          </button>
+          <div className="h-4 w-[1px] bg-border mx-0.5 hidden sm:block" />
+          <button
+            type="button"
+            onClick={() => setConfirmModal('prune')}
+            disabled={transactions.length === 0 || exporting || actionInProgress}
+            className="h-8 px-3 bg-secondary/40 hover:bg-secondary/80 text-foreground text-xs font-medium rounded-lg border border-border/80 inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-hidden"
+            title="Remove older records to keep your history organized"
+          >
+            <Scissors className="w-3.5 h-3.5 text-amber-400" />
+            <span>Clean Old Logs</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmModal('clear')}
+            disabled={transactions.length === 0 || exporting || actionInProgress}
+            className="h-8 px-3 bg-destructive/10 hover:bg-destructive/20 text-destructive text-xs font-medium rounded-lg border border-destructive/20 inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer focus-visible:ring-2 focus-visible:ring-destructive focus-visible:outline-hidden"
+            title="Remove all past cleanup records from this list"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Clear All</span>
+          </button>
+        </div>
+      </div>
 
       {/* Transactions List / Loading / Empty */}
       <div className="space-y-3">
@@ -418,44 +519,50 @@ export const HistoryView: React.FC = () => {
           <div className="p-12 text-center bg-card rounded-xl border border-border space-y-2">
             <Clock className="w-8 h-8 text-muted-foreground mx-auto" />
             <h3 className="text-sm font-semibold text-foreground">No Cleanup History Yet</h3>
-            <p className="text-xs text-muted-foreground">Completed cleanup transactions will appear here.</p>
+            <p className="text-xs text-muted-foreground">Records of your cleaned files and freed space will appear here.</p>
           </div>
         ) : filteredTransactions.length === 0 ? (
           <div className="p-8 text-center bg-card rounded-xl border border-border space-y-2">
             <Clock className="w-6 h-6 text-muted-foreground mx-auto" />
-            <h3 className="text-xs font-semibold text-foreground">No {statusFilter.toLowerCase()} records found</h3>
-            <p className="text-[11px] text-muted-foreground">Try selecting a different status filter above.</p>
+            <h3 className="text-xs font-semibold text-foreground">No records found</h3>
+            <p className="text-[11px] text-muted-foreground">Try selecting a different filter above.</p>
           </div>
         ) : (
           filteredTransactions.map((tx) => (
-            <div key={tx.transactionId} className="p-4 bg-card rounded-xl border border-border space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center space-x-2.5">
+            <div key={tx.transactionId} className="p-4 bg-card rounded-xl border border-border space-y-3 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center space-x-3">
                   <div
-                    className={`p-2 rounded-lg ${
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border ${
                       tx.dryRun
-                        ? 'bg-purple-500/10 text-purple-400'
+                        ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
                         : tx.status === 'COMPLETED'
-                        ? 'bg-emerald-500/10 text-emerald-400'
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                         : tx.status === 'PARTIAL'
-                        ? 'bg-amber-500/10 text-amber-400'
-                        : 'bg-rose-500/10 text-rose-400'
+                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                        : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
                     }`}
                   >
-                    <Trash2 className="w-4 h-4" />
+                    {tx.status === 'COMPLETED' ? (
+                      <CheckCircle2 className="w-4 h-4" />
+                    ) : tx.status === 'PARTIAL' ? (
+                      <AlertCircle className="w-4 h-4" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
                   </div>
                   <div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 flex-wrap">
                       <span className="text-xs font-bold text-foreground">
-                        {tx.ruleId === 'BATCH_ALL' ? 'Multi-Rule Batch Cleanup' : tx.ruleId}
+                        {tx.ruleId === 'BATCH_ALL' ? 'All Selected Cleanups' : tx.ruleId}
                       </span>
                       {tx.dryRun && (
-                        <span className="px-1.5 py-0.2 rounded text-[10px] bg-purple-500/20 text-purple-300 font-semibold">
-                          DRY RUN
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-500/20 text-purple-300 font-semibold border border-purple-500/30">
+                          PREVIEW (NO FILES DELETED)
                         </span>
                       )}
                       <span
-                        className={`px-1.5 py-0.2 rounded text-[10px] font-semibold border ${
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
                           tx.status === 'COMPLETED'
                             ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20'
                             : tx.status === 'PARTIAL'
@@ -463,18 +570,28 @@ export const HistoryView: React.FC = () => {
                             : 'bg-rose-500/15 text-rose-400 border-rose-500/20'
                         }`}
                       >
-                        {tx.status}
+                        {tx.status === 'COMPLETED' ? 'COMPLETED' : tx.status === 'PARTIAL' ? 'PARTLY CLEANED' : 'STOPPED'}
                       </span>
                     </div>
-                    <span className="text-[11px] text-muted-foreground">{formatDateTime(tx.startedAt)}</span>
+                    <span className="text-[11px] text-muted-foreground mt-0.5 block">
+                      {formatDateTime(tx.startedAt)}
+                    </span>
                   </div>
                 </div>
 
-                <div className="text-right">
-                  <span className="text-sm font-bold text-primary">{formatBytes(tx.bytesReclaimed)}</span>
-                  <span className="text-[10px] text-muted-foreground block">
-                    {tx.deletedCount} deleted, {tx.skippedCount} skipped
+                <div className="text-left sm:text-right flex sm:flex-col justify-between sm:justify-center items-start sm:items-end">
+                  <span className="text-sm font-bold text-primary tracking-tight">
+                    {formatBytes(tx.bytesReclaimed)} Freed
                   </span>
+                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
+                    <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-secondary text-foreground/80 font-medium">
+                      {tx.deletedCount} files removed
+                    </span>
+                    <span>•</span>
+                    <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-secondary text-muted-foreground font-medium">
+                      {tx.skippedCount} files kept safe
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -482,42 +599,67 @@ export const HistoryView: React.FC = () => {
               {(() => {
                 const skippedList = Array.isArray(tx.skippedDetails) ? tx.skippedDetails : [];
                 if (skippedList.length === 0) return null;
+                const isExpanded = !!expandedSkippedMap[tx.transactionId];
                 return (
-                  <div className="pt-2 border-t border-border/60 text-[11px] space-y-1.5 text-muted-foreground">
+                  <div className="pt-2.5 border-t border-border/60 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="font-semibold text-foreground">
-                        Skipped Files Audit ({skippedList.length}):
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-foreground">
+                          Files Kept Safe & Untouched
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-secondary text-muted-foreground font-medium">
+                          {skippedList.length} file{skippedList.length === 1 ? '' : 's'}
+                        </span>
+                      </div>
                       <button
                         type="button"
                         onClick={() => toggleSkippedDetails(tx.transactionId)}
-                        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer px-1.5 py-0.5 rounded bg-secondary/50 hover:bg-secondary focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-hidden"
-                        aria-expanded={!!expandedSkippedMap[tx.transactionId]}
-                        aria-label={`${expandedSkippedMap[tx.transactionId] ? 'Collapse' : 'Expand'} skipped files list`}
+                        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer px-2 py-0.5 rounded-md bg-secondary/50 hover:bg-secondary border border-border/50 focus-visible:ring-1 focus-visible:ring-primary focus-visible:outline-hidden"
+                        aria-expanded={isExpanded}
+                        aria-label={`${isExpanded ? 'Hide' : 'Show'} details for kept files`}
                       >
-                        {expandedSkippedMap[tx.transactionId] ? (
+                        {isExpanded ? (
                           <>
-                            <span>Collapse</span>
+                            <span>Hide Details</span>
                             <ChevronUp className="w-3 h-3" />
                           </>
                         ) : (
                           <>
-                            <span>Expand</span>
+                            <span>Show Details</span>
                             <ChevronDown className="w-3 h-3" />
                           </>
                         )}
                       </button>
                     </div>
+
                     <div
-                      className={`bg-secondary/30 p-2 rounded overflow-y-auto space-y-1 transition-all duration-200 ${
-                        expandedSkippedMap[tx.transactionId] ? 'max-h-60' : 'max-h-24'
+                      className={`overflow-y-auto space-y-1.5 transition-all duration-200 pr-1 ${
+                        isExpanded ? 'max-h-72' : 'max-h-24'
                       }`}
                     >
-                      {skippedList.map((s: { path: string; reason: string }, idx: number) => (
-                        <div key={idx} className="truncate font-mono text-[10.5px]">
-                          • {maskPathPII(s?.reason || '')}
-                        </div>
-                      ))}
+                      {skippedList.map((s: { path: string; reason: string }, idx: number) => {
+                        const parsed = parseAuditReason(s?.reason || '', s?.path || '');
+                        return (
+                          <div
+                            key={idx}
+                            className="p-2 rounded-lg bg-secondary/30 border border-border/40 text-xs flex flex-col gap-0.5"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className={`px-1.5 py-0.2 rounded text-[9.5px] font-semibold border ${parsed.badgeStyle}`}>
+                                {parsed.badgeLabel}
+                              </span>
+                              <span className="text-foreground/90 font-medium text-[11px] truncate">
+                                {parsed.message}
+                              </span>
+                            </div>
+                            {parsed.targetPath && (
+                              <div className="font-mono text-[10px] text-muted-foreground/80 truncate pl-0.5 select-all">
+                                {parsed.targetPath}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );

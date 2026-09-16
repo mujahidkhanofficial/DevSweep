@@ -169,24 +169,24 @@ export const CleanupProgressModal: React.FC<CleanupProgressModalProps> = ({
               <h3 id="cleanup-modal-title" className="text-sm font-bold text-foreground">
                 {isExecuting
                   ? isPaused
-                    ? 'Cleanup Suspended (Paused)'
+                    ? 'Cleanup Paused'
                     : dryRun
-                    ? 'Simulating Deletion (Dry Run)'
-                    : 'Executing Cleanup'
+                    ? 'Testing Cleanup (No Files Deleted)'
+                    : 'Cleaning Selected Files...'
                   : isCancelled
-                  ? 'Cleanup Stopped by User'
+                  ? 'Cleanup Stopped'
                   : isPartial
-                  ? 'Cleanup completed with some items skipped'
+                  ? 'Cleanup Complete (Some Files Kept Safe)'
                   : isFailed
                   ? 'Cleanup Failed'
                   : dryRun
-                  ? 'Dry Run Simulation Complete'
-                  : 'Cleanup Completed Successfully'}
+                  ? 'Test Run Complete (No Files Deleted)'
+                  : 'Cleanup Completed Successfully!'}
               </h3>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 {isExecuting
                   ? `Overall: ${processedItems} / ${totalItems} items processed • ${itemsLeft} remaining`
-                  : `${transaction?.deletedCount ?? 0} items deleted • ${transaction?.skippedCount ?? 0} skipped • ${transaction?.failedCount ?? 0} failed`}
+                  : `${transaction?.deletedCount ?? 0} files deleted • ${transaction?.skippedCount ?? 0} kept safe`}
               </p>
             </div>
           </div>
@@ -194,7 +194,7 @@ export const CleanupProgressModal: React.FC<CleanupProgressModalProps> = ({
           <div className="flex items-center space-x-2">
             {dryRun && (
               <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-secondary text-primary border border-border">
-                Dry Run
+                Preview
               </span>
             )}
             <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-secondary text-foreground border border-border">
@@ -210,7 +210,7 @@ export const CleanupProgressModal: React.FC<CleanupProgressModalProps> = ({
             <div className="flex items-start justify-between gap-2">
               <div className="space-y-0.5 min-w-0">
                 <div className="text-[10px] uppercase font-semibold tracking-wider text-muted-foreground">
-                  Active Target
+                  Currently Cleaning
                 </div>
                 <div className="text-sm font-bold text-foreground truncate flex items-center gap-1.5">
                   <Folder className="w-4 h-4 text-primary shrink-0" />
@@ -328,7 +328,7 @@ export const CleanupProgressModal: React.FC<CleanupProgressModalProps> = ({
           <div className="p-3 rounded-lg bg-secondary/30 border border-border/60 space-y-1">
             <div className="flex items-center space-x-1.5 text-muted-foreground text-[11px]">
               <HardDrive className="w-3.5 h-3.5 text-primary" />
-              <span>Reclaimed</span>
+              <span>Space Freed</span>
             </div>
             <div className="text-base font-bold text-foreground">
               {formatBytes(bytesReclaimed)}
@@ -349,7 +349,7 @@ export const CleanupProgressModal: React.FC<CleanupProgressModalProps> = ({
               <span className="text-xs font-normal text-muted-foreground">remaining</span>
             </div>
             <span className="text-[10px] text-muted-foreground block truncate">
-              {itemsLeft > 0 ? `${itemsLeft} items in queue` : 'Queue drained'}
+              {itemsLeft > 0 ? `${itemsLeft} items in queue` : 'All items finished'}
             </span>
           </div>
 
@@ -357,7 +357,7 @@ export const CleanupProgressModal: React.FC<CleanupProgressModalProps> = ({
           <div className="p-3 rounded-lg bg-secondary/30 border border-border/60 space-y-1">
             <div className="flex items-center space-x-1.5 text-muted-foreground text-[11px]">
               <Zap className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Speed & Time</span>
+              <span>Time Remaining</span>
             </div>
             <div className="text-base font-bold text-foreground truncate">
               {progress?.bytesPerSecond ? `${formatBytes(progress.bytesPerSecond)}/s` : 'Active'}
@@ -366,7 +366,7 @@ export const CleanupProgressModal: React.FC<CleanupProgressModalProps> = ({
               {isExecuting && !isPaused
                 ? formatRemainingTime(progress?.estimatedRemainingTimeMs || 0)
                 : isPaused
-                ? 'Suspended'
+                ? 'Paused'
                 : 'Finished'}
             </span>
           </div>

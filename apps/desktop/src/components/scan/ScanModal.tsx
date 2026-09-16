@@ -84,24 +84,24 @@ export const ScanModal: React.FC<ScanModalProps> = ({ isOpen, onClose }) => {
               <h3 id="scan-modal-title" className="text-sm font-bold text-foreground">
                 {isScanning
                   ? isPaused
-                    ? 'Smart Scan Paused'
-                    : `Scanning: ${progress?.currentRule || 'Developer Caches'}`
+                    ? 'Scan Paused'
+                    : `Scanning: ${progress?.currentRule || 'Temporary Files'}`
                   : isFailed
-                  ? 'Smart Scan Failed'
+                  ? 'Scan Failed'
                   : isCancelled
                   ? 'Scan Cancelled'
-                  : 'Smart Scan Completed'}
+                  : 'Scan Complete!'}
               </h3>
               <p className="text-[11px] text-muted-foreground">
                 {isScanning
-                  ? `Stage ${currentRuleIdx} of ${totalRules} • ${progress?.currentCategory || 'ANALYZING'}`
+                  ? `Step ${currentRuleIdx} of ${totalRules} • ${progress?.currentCategory || 'Scanning'}`
                   : isFailed
                   ? 'The scanner encountered an unexpected error.'
                   : isCancelled
                   ? 'Scan was stopped before completion.'
                   : items.length === 0
-                  ? 'All developer caches analyzed — no reclaimable files found'
-                  : `${items.length} reclaimable targets identified`}
+                  ? 'All safe locations checked — no junk files found'
+                  : `${items.length} cleanable item(s) found`}
               </p>
             </div>
           </div>
@@ -143,20 +143,20 @@ export const ScanModal: React.FC<ScanModalProps> = ({ isOpen, onClose }) => {
             <div className="p-3 rounded-lg bg-secondary/40 border border-border/50 space-y-1">
               <div className="flex items-center space-x-1.5 text-muted-foreground text-[11px]">
                 <HardDrive className="w-3.5 h-3.5" />
-                <span>Space Identified</span>
+                <span>Cleanable Space Found</span>
               </div>
               <div className="text-base font-bold text-foreground">
                 {formatBytes(progress?.scannedBytes || 0)}
               </div>
               <span className="text-[10px] text-muted-foreground block truncate">
-                {formatNumber(progress?.scannedFiles || 0)} files analyzed
+                {formatNumber(progress?.scannedFiles || 0)} files checked
               </span>
             </div>
 
             <div className="p-3 rounded-lg bg-secondary/40 border border-border/50 space-y-1">
               <div className="flex items-center space-x-1.5 text-muted-foreground text-[11px]">
                 <Zap className="w-3.5 h-3.5 text-amber-400" />
-                <span>Throughput</span>
+                <span>Scan Speed</span>
               </div>
               <div className="text-base font-bold text-foreground">
                 {formatNumber(progress?.filesPerSecond || 0)}{' '}
@@ -269,7 +269,7 @@ export const ScanModal: React.FC<ScanModalProps> = ({ isOpen, onClose }) => {
                 onClick={onClose}
                 className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow-xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-card focus-visible:outline-hidden"
               >
-                {items.length > 0 ? `Review ${items.length} Candidates` : 'Close'}
+                {items.length > 0 ? `Review ${items.length} Cleanable Items` : 'Close'}
               </button>
             )
           )}

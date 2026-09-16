@@ -125,10 +125,10 @@ export const SettingsView: React.FC = () => {
       <div className="p-5 bg-card rounded-xl border border-border space-y-4">
         <div className="flex items-center space-x-2 text-sm font-semibold text-foreground">
           <Shield className="w-4 h-4 text-safety-safe" />
-          <span>User-Defined Protected Locations</span>
+          <span>Protected Folders (Never Cleaned)</span>
         </div>
         <p className="text-xs text-muted-foreground">
-          Directories placed here are strictly immuned from automatic cleanup. Source repositories, clients, and project roots are never cleaned.
+          Folders you add here are completely safe and will never be touched by cleaning. Your projects, documents, and personal files will stay safe.
         </p>
 
         {/* Add path form */}
@@ -216,7 +216,7 @@ export const SettingsView: React.FC = () => {
           <span>Low Disk Space Alerts</span>
         </div>
         <p className="text-xs text-muted-foreground">
-          Trigger warning notification when system drive space falls below this threshold.
+          Show an alert when your hard drive has less free space than this.
         </p>
 
         <div className="flex items-center space-x-4">
@@ -239,7 +239,7 @@ export const SettingsView: React.FC = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2 text-sm font-semibold text-foreground">
             <History className="w-4 h-4 text-primary" />
-            <span>Audit History Retention Policy</span>
+            <span>History Keeping Settings</span>
           </div>
           <button
             type="button"
@@ -253,13 +253,13 @@ export const SettingsView: React.FC = () => {
                     type: 'success',
                     message:
                       res.prunedCount && res.prunedCount > 0
-                        ? `Pruned ${res.prunedCount} record${res.prunedCount > 1 ? 's' : ''} according to current settings.`
-                        : 'History already satisfies current retention settings. No records pruned.'
+                        ? `Removed ${res.prunedCount} older record${res.prunedCount > 1 ? 's' : ''} to keep history clean.`
+                        : 'Your history is already up to date. No old records needed removal.'
                   });
                 } else {
                   setPruneFeedback({
                     type: 'error',
-                    message: res.error || 'Could not prune history.'
+                    message: res.error || 'Could not clean up history.'
                   });
                 }
               } finally {
@@ -268,15 +268,15 @@ export const SettingsView: React.FC = () => {
             }}
             disabled={pruningNow}
             className="px-3 py-1.5 bg-secondary text-foreground hover:bg-secondary/80 text-xs font-medium rounded-lg border border-border flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-hidden"
-            title="Enforce configured retention policy now"
+            title="Clean up older records according to your settings now"
           >
             <Scissors className="w-3.5 h-3.5 text-amber-400" />
-            <span>{pruningNow ? 'Pruning...' : 'Prune History Now'}</span>
+            <span>{pruningNow ? 'Cleaning...' : 'Clean Old History Now'}</span>
           </button>
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Configure how long historical cleanup audit transactions are retained. Malformed or uninterpretable records are always preserved to guarantee zero accidental audit loss.
+          Choose how long to save past cleanup logs. Important records are kept safe so you never lose your history.
         </p>
 
         {pruneFeedback && (
@@ -310,7 +310,7 @@ export const SettingsView: React.FC = () => {
           {/* Max Age */}
           <div className="space-y-1.5">
             <label htmlFor="time-based-retention" className="text-xs font-medium text-foreground block">
-              Time-based Retention
+              How Long to Keep History
             </label>
             <select
               id="time-based-retention"
@@ -336,7 +336,7 @@ export const SettingsView: React.FC = () => {
           {/* Max Records */}
           <div className="space-y-1.5">
             <label htmlFor="max-records-retention" className="text-xs font-medium text-foreground block">
-              Maximum Record Limit
+              Maximum Number of Logs to Keep
             </label>
             <select
               id="max-records-retention"
@@ -363,10 +363,10 @@ export const SettingsView: React.FC = () => {
         <div className="pt-2 border-t border-border/50 flex items-center justify-between">
           <div className="space-y-0.5">
             <span className="text-xs font-medium text-foreground block">
-              Auto-prune when cleanup completes
+              Auto-clean old logs after each cleanup
             </span>
             <span className="text-[11px] text-muted-foreground block">
-              Automatically enforces retention when saving newly completed cleanup transactions. Saving settings will never perform an immediate automatic purge.
+              Automatically removes older cleanup logs after each cleanup to keep your list fast and clean.
             </span>
           </div>
 

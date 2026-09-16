@@ -47,11 +47,11 @@ export const StorageView: React.FC = () => {
       <div>
         <div className="flex items-center space-x-2 text-xs font-semibold text-primary uppercase tracking-wider">
           <PieChart className="w-4 h-4" />
-          <span>Informational Mode</span>
+          <span>Storage Overview</span>
         </div>
-        <h1 className="text-xl font-bold text-foreground mt-1">Storage & Large File Analyzer</h1>
+        <h1 className="text-xl font-bold text-foreground mt-1">Storage & Big Files</h1>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Purely observational disk analytics. Storage analysis is strictly decoupled from automated deletion.
+          View disk space usage and inspect large files taking up drive capacity. (No files are deleted on this screen).
         </p>
       </div>
 
@@ -94,7 +94,7 @@ export const StorageView: React.FC = () => {
       ) : (
         <div className="p-5 rounded-xl bg-card border border-border space-y-4">
           <h2 className="text-sm font-semibold text-foreground">
-            Estimated Developer Storage Consumption ({currentDrive?.caption || 'C:'})
+            Estimated Storage by Category ({currentDrive?.caption || 'C:'})
           </h2>
 
           <div className="w-full h-3 bg-secondary rounded-full overflow-hidden flex">
@@ -140,11 +140,11 @@ export const StorageView: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold text-foreground">Large File Finder</h2>
-            <p className="text-xs text-muted-foreground">Find oversized artifacts consuming drive capacity</p>
+            <p className="text-xs text-muted-foreground">Find big files taking up drive capacity</p>
           </div>
 
           <div className="flex items-center space-x-2" role="group" aria-label="Large file size threshold filter">
-            <span className="text-xs text-muted-foreground">Threshold:</span>
+            <span className="text-xs text-muted-foreground">Minimum Size:</span>
             {[0.5, 1, 5, 10].map((val) => (
               <button
                 key={val}
