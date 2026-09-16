@@ -435,7 +435,19 @@ export const SettingsView: React.FC = () => {
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
             <div className="flex items-center space-x-2.5">
-              <img src="/icon.png" alt="DevSweep Logo" className="w-5 h-5 rounded-xs object-contain" />
+              {/* Official brand icon reference: src="/icon.png" */}
+              <img
+                src={typeof window !== 'undefined' && window.location.protocol === 'file:' ? './icon.png' : '/icon.png'}
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  if (!target.dataset.fallback) {
+                    target.dataset.fallback = 'true';
+                    target.src = './icon.png';
+                  }
+                }}
+                alt="DevSweep Logo"
+                className="w-5 h-5 rounded-xs object-contain"
+              />
               <span className="text-sm font-bold text-foreground">DevSweep</span>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-primary/15 text-primary border border-primary/20">
                 v1.0.0

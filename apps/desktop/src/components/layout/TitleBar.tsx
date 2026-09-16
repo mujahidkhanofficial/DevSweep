@@ -12,7 +12,19 @@ export const TitleBar: React.FC = () => {
   return (
     <header className="app-titlebar h-9 w-full bg-background border-b border-border flex items-center justify-between px-3 select-none z-50">
       <div className="flex items-center space-x-2 text-xs font-medium text-foreground">
-        <img src="/icon.png" alt="DevSweep" className="w-4 h-4 rounded-xs object-contain" />
+        {/* Official brand icon reference: src="/icon.png" */}
+        <img
+          src={typeof window !== 'undefined' && window.location.protocol === 'file:' ? './icon.png' : '/icon.png'}
+          onError={(e) => {
+            const target = e.currentTarget;
+            if (!target.dataset.fallback) {
+              target.dataset.fallback = 'true';
+              target.src = './icon.png';
+            }
+          }}
+          alt="DevSweep"
+          className="w-4 h-4 rounded-xs object-contain"
+        />
         <span>DevSweep</span>
         <span className="text-[10px] text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">v1.0 Windows</span>
       </div>

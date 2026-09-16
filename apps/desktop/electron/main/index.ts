@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, dialog, Notification } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, dialog, Notification, nativeImage } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -265,6 +265,15 @@ function createWindow() {
       sandbox: true
     }
   });
+
+  if (resolvedIcon) {
+    try {
+      const nIcon = nativeImage.createFromPath(resolvedIcon);
+      if (!nIcon.isEmpty()) {
+        mainWindow.setIcon(nIcon);
+      }
+    } catch {}
+  }
 
   perf.mark('window-created');
 
