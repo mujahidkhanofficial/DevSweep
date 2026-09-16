@@ -15,8 +15,11 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [showScanModal, setShowScanModal] = useState(false);
 
-  const { fetchSystemInfo } = useDiskStore();
-  const { items, isScanning, startScan, cancelScan } = useScanStore();
+  const fetchSystemInfo = useDiskStore((s) => s.fetchSystemInfo);
+  const candidateCount = useScanStore((s) => s.items.length);
+  const isScanning = useScanStore((s) => s.isScanning);
+  const startScan = useScanStore((s) => s.startScan);
+  const cancelScan = useScanStore((s) => s.cancelScan);
 
   useEffect(() => {
     fetchSystemInfo();
@@ -63,7 +66,7 @@ export const App: React.FC = () => {
             cancelScan();
           } else {
             setShowScanModal(false);
-            if (items.length > 0) {
+            if (candidateCount > 0) {
               setActiveTab('cleanup');
             }
           }
@@ -73,7 +76,7 @@ export const App: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isScanning, showScanModal, items.length]);
+  }, [isScanning, showScanModal, candidateCount]);
 
   const handleTriggerScan = async () => {
     setShowScanModal(true);
@@ -98,7 +101,7 @@ export const App: React.FC = () => {
         <Sidebar
           activeTab={activeTab}
           onTabChange={(tab) => setActiveTab(tab)}
-          candidateCount={items.length}
+          candidateCount={candidateCount}
         />
 
         <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto bg-background/50 outline-hidden">
@@ -120,7 +123,7 @@ export const App: React.FC = () => {
         isOpen={showScanModal}
         onClose={() => {
           setShowScanModal(false);
-          if (items.length > 0) {
+          if (candidateCount > 0) {
             setActiveTab('cleanup');
           }
         }}

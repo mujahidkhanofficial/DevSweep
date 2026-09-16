@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import {
   History,
   ShieldCheck,
@@ -56,19 +56,32 @@ export const HistoryView: React.FC = () => {
     loadHistory();
   }, []);
 
-  const totalReclaimedLifetime = transactions
-    .filter((tx) => tx && !tx.dryRun)
-    .reduce((acc, tx) => acc + (tx.bytesReclaimed || 0), 0);
+  const totalReclaimedLifetime = useMemo(() => {
+    return transactions
+      .filter((tx) => tx && !tx.dryRun)
+      .reduce((acc, tx) => acc + (tx.bytesReclaimed || 0), 0);
+  }, [transactions]);
 
-  const completedCount = transactions.filter((t) => t && t.status === 'COMPLETED').length;
-  const partialCount = transactions.filter((t) => t && t.status === 'PARTIAL').length;
-  const failedCount = transactions.filter((t) => t && t.status === 'FAILED').length;
+  const { completedCount, partialCount, failedCount } = useMemo(() => {
+    let completed = 0;
+    let partial = 0;
+    let failed = 0;
+    for (const t of transactions) {
+      if (!t) continue;
+      if (t.status === 'COMPLETED') completed++;
+      else if (t.status === 'PARTIAL') partial++;
+      else if (t.status === 'FAILED') failed++;
+    }
+    return { completedCount: completed, partialCount: partial, failedCount: failed };
+  }, [transactions]);
 
-  const filteredTransactions = transactions.filter((t) => {
-    if (!t) return false;
-    if (statusFilter === 'ALL') return true;
-    return t.status === statusFilter;
-  });
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((t) => {
+      if (!t) return false;
+      if (statusFilter === 'ALL') return true;
+      return t.status === statusFilter;
+    });
+  }, [transactions, statusFilter]);
 
   const handleExport = async (format: 'json' | 'csv') => {
     if (transactions.length === 0 || exporting) return;
@@ -219,14 +232,14 @@ export const HistoryView: React.FC = () => {
 
       {/* Confirmation Modal */}
       {confirmModal && (
-        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
           <div
             ref={modalRef}
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="confirm-modal-title"
             tabIndex={-1}
-            className="bg-card border border-border rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150 focus-visible:outline-hidden"
+            className="bg-card border border-border rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4 animate-in fade-in zoom-in-95 duration-150 focus-visible:outline-hidden"
           >
             <div className="flex items-center justify-between">
               <h3 id="confirm-modal-title" className="text-base font-bold text-foreground flex items-center gap-2">
@@ -384,7 +397,7 @@ export const HistoryView: React.FC = () => {
         {loading && transactions.length === 0 ? (
           <div className="space-y-3" aria-busy="true" aria-label="Loading history records">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="p-4 bg-card/60 rounded-xl border border-border space-y-3 animate-pulse" tabIndex={-1}>
+              <div key={i} className="p-4 bg-card/60 rounded-xl border border-border space-y-3" tabIndex={-1}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2.5">
                     <div className="w-8 h-8 rounded-lg bg-secondary/70" />

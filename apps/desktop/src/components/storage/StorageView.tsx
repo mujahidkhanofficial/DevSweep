@@ -1,7 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { PieChart, HardDrive, FileText, AlertCircle, Search, Filter, X } from 'lucide-react';
 import { useDiskStore } from '../../stores/useDiskStore.js';
 import { formatBytes } from '../../lib/format.js';
+
+// Informational storage breakdown by developer category (static metadata)
+const INFORMATIONAL_CATEGORIES = [
+  { name: 'Developer Caches (npm, Gradle, Pub)', size: 18.4 * 1e9, percent: 32, note: 'Rebuildable packages & tool caches' },
+  { name: 'Project Build Artifacts (dist, build, out)', size: 8.2 * 1e9, percent: 14, note: 'Compiled assets and temporary builds' },
+  { name: 'IDE & Editor Data (VS Code, JetBrains)', size: 5.6 * 1e9, percent: 10, note: 'V8 compilation caches & indexed symbols' },
+  { name: 'System Temp & Crash Dumps', size: 3.1 * 1e9, percent: 5, note: 'Expired installer temp files and error logs' },
+  { name: 'Other Files & User Data', size: 22.4 * 1e9, percent: 39, note: 'Source code, documents and binaries' }
+];
+
+// Base large files reference list (static metadata)
+const SAMPLE_LARGE_FILES = [
+  { name: 'android-sdk-system-images.zip', path: 'C:\\Users\\User\\Downloads\\android-sdk-system-images.zip', size: 3.8 * 1e9 },
+  { name: 'electron-v32-win-x64.zip', path: 'C:\\Users\\User\\AppData\\Local\\electron\\Cache\\electron-v32.zip', size: 1.4 * 1e9 },
+  { name: 'gradle-8.5-all.zip', path: 'C:\\Users\\User\\.gradle\\wrapper\\dists\\gradle-8.5-all.zip', size: 0.9 * 1e9 },
+  { name: 'heapdump-node-crash.dmp', path: 'C:\\Users\\User\\AppData\\Local\\CrashDumps\\heapdump.dmp', size: 0.6 * 1e9 }
+];
 
 export const StorageView: React.FC = () => {
   const { drives, selectedDrive, loading, error: diskError, fetchSystemInfo } = useDiskStore();
@@ -10,25 +27,17 @@ export const StorageView: React.FC = () => {
   const [thresholdGB, setThresholdGB] = useState<number>(1);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Informational storage breakdown by developer category
-  const categories = [
-    { name: 'Developer Caches (npm, Gradle, Pub)', size: 18.4 * 1e9, percent: 32, note: 'Rebuildable packages & tool caches' },
-    { name: 'Project Build Artifacts (dist, build, out)', size: 8.2 * 1e9, percent: 14, note: 'Compiled assets and temporary builds' },
-    { name: 'IDE & Editor Data (VS Code, JetBrains)', size: 5.6 * 1e9, percent: 10, note: 'V8 compilation caches & indexed symbols' },
-    { name: 'System Temp & Crash Dumps', size: 3.1 * 1e9, percent: 5, note: 'Expired installer temp files and error logs' },
-    { name: 'Other Files & User Data', size: 22.4 * 1e9, percent: 39, note: 'Source code, documents and binaries' }
-  ];
+  const categories = INFORMATIONAL_CATEGORIES;
+  const allLargeFiles = SAMPLE_LARGE_FILES;
 
-  // Base large files list
-  const allLargeFiles = [
-    { name: 'android-sdk-system-images.zip', path: 'C:\\Users\\User\\Downloads\\android-sdk-system-images.zip', size: 3.8 * 1e9 },
-    { name: 'electron-v32-win-x64.zip', path: 'C:\\Users\\User\\AppData\\Local\\electron\\Cache\\electron-v32.zip', size: 1.4 * 1e9 },
-    { name: 'gradle-8.5-all.zip', path: 'C:\\Users\\User\\.gradle\\wrapper\\dists\\gradle-8.5-all.zip', size: 0.9 * 1e9 },
-    { name: 'heapdump-node-crash.dmp', path: 'C:\\Users\\User\\AppData\\Local\\CrashDumps\\heapdump.dmp', size: 0.6 * 1e9 }
-  ];
-
-  const filesAboveThreshold = allLargeFiles.filter((f) => f.size >= thresholdGB * 1e9);
-  const largeFiles = filesAboveThreshold.filter((f) => f.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filesAboveThreshold = useMemo(
+    () => allLargeFiles.filter((f) => f.size >= thresholdGB * 1e9),
+    [thresholdGB]
+  );
+  const largeFiles = useMemo(
+    () => filesAboveThreshold.filter((f) => f.name.toLowerCase().includes(searchTerm.toLowerCase())),
+    [filesAboveThreshold, searchTerm]
+  );
 
   const thresholdLabel = thresholdGB >= 1 ? `${thresholdGB} GB` : '500 MB';
 
@@ -74,11 +83,11 @@ export const StorageView: React.FC = () => {
           aria-label="Loading storage analytics"
           className="p-5 rounded-xl bg-card border border-border space-y-4 shadow-sm"
         >
-          <div className="w-64 h-4 rounded bg-secondary/80 animate-pulse" aria-hidden="true" />
-          <div className="w-full h-3 rounded-full bg-secondary/70 animate-pulse" aria-hidden="true" />
+          <div className="w-64 h-4 rounded bg-secondary/80" aria-hidden="true" />
+          <div className="w-full h-3 rounded-full bg-secondary/70" aria-hidden="true" />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2" aria-hidden="true">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="p-3 rounded-lg bg-secondary/40 border border-border h-14 animate-pulse" />
+              <div key={i} className="p-3 rounded-lg bg-secondary/40 border border-border h-14" />
             ))}
           </div>
         </div>

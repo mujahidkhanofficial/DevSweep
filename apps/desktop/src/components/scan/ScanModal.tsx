@@ -57,14 +57,14 @@ export const ScanModal: React.FC<ScanModalProps> = ({ isOpen, onClose }) => {
   const isFailed = scanStatus === 'FAILED';
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="scan-modal-title"
         tabIndex={-1}
-        className="bg-card border border-border rounded-xl p-6 w-full max-w-lg shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150 focus-visible:outline-hidden"
+        className="bg-card border border-border rounded-xl p-6 w-full max-w-lg shadow-xl space-y-5 animate-in fade-in zoom-in-95 duration-150 focus-visible:outline-hidden"
       >
         {/* Header */}
         <div className="flex items-center justify-between">

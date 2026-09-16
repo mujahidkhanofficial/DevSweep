@@ -78,26 +78,25 @@ const IndeterminateCheckbox: React.FC<IndeterminateCheckboxProps> = ({
 };
 
 export const CleanupView: React.FC = () => {
-  const {
-    items,
-    selectedItemIds,
-    toolchainFilter,
-    setToolchainFilter,
-    toggleItemSelection,
-    selectAll,
-    selectCategory,
-    selectItems,
-    removeItemsAfterCleanup,
-    scanSessionId,
-    scanStatus,
-    scannedCandidateCount,
-    currentSessionReclaimed,
-    error: scanError,
-    clearError: clearScanError,
-    startScan
-  } = useScanStore();
-  const { loadHistory } = useHistoryStore();
-  const { fetchSystemInfo } = useDiskStore();
+  const items = useScanStore((s) => s.items);
+  const selectedItemIds = useScanStore((s) => s.selectedItemIds);
+  const toolchainFilter = useScanStore((s) => s.toolchainFilter);
+  const setToolchainFilter = useScanStore((s) => s.setToolchainFilter);
+  const toggleItemSelection = useScanStore((s) => s.toggleItemSelection);
+  const selectAll = useScanStore((s) => s.selectAll);
+  const selectCategory = useScanStore((s) => s.selectCategory);
+  const selectItems = useScanStore((s) => s.selectItems);
+  const removeItemsAfterCleanup = useScanStore((s) => s.removeItemsAfterCleanup);
+  const scanSessionId = useScanStore((s) => s.scanSessionId);
+  const scanStatus = useScanStore((s) => s.scanStatus);
+  const scannedCandidateCount = useScanStore((s) => s.scannedCandidateCount);
+  const currentSessionReclaimed = useScanStore((s) => s.currentSessionReclaimed);
+  const scanError = useScanStore((s) => s.error);
+  const clearScanError = useScanStore((s) => s.clearError);
+  const startScan = useScanStore((s) => s.startScan);
+
+  const loadHistory = useHistoryStore((s) => s.loadHistory);
+  const fetchSystemInfo = useDiskStore((s) => s.fetchSystemInfo);
 
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [dryRun, setDryRun] = useState(false);
@@ -853,7 +852,7 @@ export const CleanupView: React.FC = () => {
       </div>
 
       {/* Sticky Bottom Action Bar (Remains visible during scrolling, decoupled from sidebar width) */}
-      <div className="sticky bottom-0 z-20 bg-card/95 backdrop-blur-xs border-t border-border shadow-2xl">
+      <div className="sticky bottom-0 z-20 bg-card border-t border-border shadow-lg">
         <div className="max-w-6xl mx-auto p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3 text-xs">
             <div>

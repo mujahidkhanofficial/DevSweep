@@ -6,4 +6,5 @@ export * from './remediation.js';
 export * from './safety-toolchain-explanations.js';
 export * from './history-export.js';
 export * from './history-retention.js';
+export * from './throttler.js';
 

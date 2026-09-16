@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   HardDrive,
   Sparkles,
@@ -39,20 +39,25 @@ interface DashboardViewProps {
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({ onStartScan, onNavigateToCleanup }) => {
-  const {
-    drives,
-    environments,
-    selectedDrive,
-    setSelectedDrive,
-    fetchSystemInfo,
-    loading,
-    error: diskError,
-    clearError: clearDiskError
-  } = useDiskStore();
-  const { items, isScanning, scanStatus, setToolchainFilter } = useScanStore();
+  const drives = useDiskStore((s) => s.drives);
+  const environments = useDiskStore((s) => s.environments);
+  const selectedDrive = useDiskStore((s) => s.selectedDrive);
+  const setSelectedDrive = useDiskStore((s) => s.setSelectedDrive);
+  const fetchSystemInfo = useDiskStore((s) => s.fetchSystemInfo);
+  const loading = useDiskStore((s) => s.loading);
+  const diskError = useDiskStore((s) => s.error);
+  const clearDiskError = useDiskStore((s) => s.clearError);
+
+  const items = useScanStore((s) => s.items);
+  const isScanning = useScanStore((s) => s.isScanning);
+  const scanStatus = useScanStore((s) => s.scanStatus);
+  const setToolchainFilter = useScanStore((s) => s.setToolchainFilter);
   const [selectedEnvForDetail, setSelectedEnvForDetail] = useState<DetectedEnvironment | null>(null);
 
-  const totalScannedBytes = items.reduce((acc, it) => acc + it.size, 0);
+  const totalScannedBytes = useMemo(
+    () => items.reduce((acc, it) => acc + it.size, 0),
+    [items]
+  );
   const currentDrive = drives.find((d) => d.caption === selectedDrive) || drives[0];
 
   const scanState: 'NOT_SCANNED' | 'SCANNED_EMPTY' | 'SCANNED_WITH_CANDIDATES' =
@@ -62,17 +67,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onStartScan, onNav
       ? 'SCANNED_EMPTY'
       : 'NOT_SCANNED';
 
-  const getToolchainStats = (envId: string) => {
-    const tid = toToolchainId(envId);
-    if (!tid || items.length === 0) {
-      return { count: 0, bytes: 0, candidates: [] };
+  const toolchainStatsMap = useMemo(() => {
+    const map = new Map<string, { count: number; bytes: number; candidates: typeof items }>();
+    if (items.length === 0) return map;
+    for (const envId of VALID_TOOLCHAINS) {
+      const tid = toToolchainId(envId);
+      if (!tid) continue;
+      const matching = items.filter((it) => isItemAssociatedWithToolchain(it, tid));
+      map.set(envId, {
+        count: matching.length,
+        bytes: matching.reduce((acc, it) => acc + it.size, 0),
+        candidates: matching
+      });
     }
-    const matching = items.filter((it) => isItemAssociatedWithToolchain(it, tid));
-    return {
-      count: matching.length,
-      bytes: matching.reduce((acc, it) => acc + it.size, 0),
-      candidates: matching
-    };
+    return map;
+  }, [items]);
+
+  const getToolchainStats = (envId: string) => {
+    return toolchainStatsMap.get(envId) || { count: 0, bytes: 0, candidates: [] };
   };
 
   return (
@@ -136,17 +148,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onStartScan, onNav
           className="p-5 rounded-xl bg-card border border-border space-y-4 shadow-sm h-36 flex flex-col justify-between"
         >
           <div className="flex items-center space-x-3" aria-hidden="true">
-            <div className="w-10 h-10 rounded-lg bg-secondary/70 animate-pulse" />
+            <div className="w-10 h-10 rounded-lg bg-secondary/70" />
             <div className="space-y-2">
-              <div className="w-32 h-4 rounded bg-secondary/80 animate-pulse" />
-              <div className="w-48 h-3 rounded bg-secondary/50 animate-pulse" />
+              <div className="w-32 h-4 rounded bg-secondary/80" />
+              <div className="w-48 h-3 rounded bg-secondary/50" />
             </div>
           </div>
           <div className="space-y-2" aria-hidden="true">
-            <div className="w-full h-3 rounded-full bg-secondary/70 animate-pulse" />
+            <div className="w-full h-3 rounded-full bg-secondary/70" />
             <div className="flex justify-between">
-              <div className="w-20 h-3 rounded bg-secondary/50 animate-pulse" />
-              <div className="w-24 h-3 rounded bg-secondary/50 animate-pulse" />
+              <div className="w-20 h-3 rounded bg-secondary/50" />
+              <div className="w-24 h-3 rounded bg-secondary/50" />
             </div>
           </div>
         </div>
@@ -292,10 +304,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onStartScan, onNav
                 className="p-3.5 rounded-xl border border-border/60 bg-card/60 h-28 flex flex-col justify-between"
               >
                 <div className="flex items-center space-x-2">
-                  <div className="w-4 h-4 rounded-full bg-secondary/80 animate-pulse" />
-                  <div className="w-16 h-3 rounded bg-secondary/80 animate-pulse" />
+                  <div className="w-4 h-4 rounded-full bg-secondary/80" />
+                  <div className="w-16 h-3 rounded bg-secondary/80" />
                 </div>
-                <div className="w-20 h-2.5 rounded bg-secondary/60 animate-pulse" />
+                <div className="w-20 h-2.5 rounded bg-secondary/60" />
               </div>
             ))}
           </div>
@@ -387,7 +399,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onStartScan, onNav
 
         return (
           <div
-            className="fixed inset-0 z-50 bg-background/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-100"
+            className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 animate-in fade-in duration-100"
             onClick={() => setSelectedEnvForDetail(null)}
             onKeyDown={(e) => {
               if (e.key === 'Escape') setSelectedEnvForDetail(null);

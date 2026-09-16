@@ -23,13 +23,15 @@ import {
   ScannedItem,
   formatScanNotification,
   formatCleanupNotification,
-  shouldSendNotification,
   NativeNotificationPayload,
   HistoryRetentionConfig,
   DEFAULT_RETENTION_CONFIG,
   validateRetentionConfig,
-  pruneHistoryRecords
+  pruneHistoryRecords,
+  createThrottledProgressEmitter,
+  PROGRESS_UPDATE_INTERVAL_MS
 } from '@cleaner/shared';
+import { perf } from './perf.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,41 +41,6 @@ const baseAppData = process.env.APPDATA || path.join(process.env.USERPROFILE || 
 const appDataDir = path.join(baseAppData, 'DevSweep');
 const legacyAppDataDir = path.join(baseAppData, 'developer-disk-cleaner');
 
-if (!fs.existsSync(appDataDir)) {
-  fs.mkdirSync(appDataDir, { recursive: true });
-}
-
-// One-time safe historical migration from legacy storage directory
-if (fs.existsSync(legacyAppDataDir)) {
-  const legacyHistory = path.join(legacyAppDataDir, 'history.json');
-  const targetHistory = path.join(appDataDir, 'history.json');
-  if (fs.existsSync(legacyHistory) && !fs.existsSync(targetHistory)) {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(legacyHistory, 'utf8'));
-      if (Array.isArray(parsed)) {
-        fs.copyFileSync(legacyHistory, targetHistory);
-        console.log('[DevSweep] Migrated historical transactions from legacy storage to DevSweep');
-      }
-    } catch (migErr) {
-      console.error('[DevSweep] Legacy history migration skipped due to format:', migErr);
-    }
-  }
-
-  const legacyConfig = path.join(legacyAppDataDir, 'config.json');
-  const targetConfig = path.join(appDataDir, 'config.json');
-  if (fs.existsSync(legacyConfig) && !fs.existsSync(targetConfig)) {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(legacyConfig, 'utf8'));
-      if (parsed && typeof parsed === 'object') {
-        fs.copyFileSync(legacyConfig, targetConfig);
-        console.log('[DevSweep] Migrated user settings from legacy storage to DevSweep');
-      }
-    } catch (migErr) {
-      console.error('[DevSweep] Legacy config migration skipped due to format:', migErr);
-    }
-  }
-}
-
 const configPath = path.join(appDataDir, 'config.json');
 const historyPath = path.join(appDataDir, 'history.json');
 
@@ -82,77 +49,178 @@ interface AppConfig {
   historyRetention?: HistoryRetentionConfig;
 }
 
-// Load stored settings and history
-function loadConfig(): AppConfig {
-  try {
-    if (fs.existsSync(configPath)) {
-      const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      const protectedPaths = Array.isArray(parsed?.userProtectedPaths) ? parsed.userProtectedPaths : [];
-      let retention = DEFAULT_RETENTION_CONFIG;
-      if (parsed?.historyRetention) {
-        const validation = validateRetentionConfig(parsed.historyRetention);
-        if (validation.valid && validation.config) {
-          retention = validation.config;
+// --------------------------------------------------------------------------
+// Storage Readiness & Failure-Isolated Migration
+// --------------------------------------------------------------------------
+let storageReadyPromise: Promise<void> | null = null;
+
+function ensureStorageReady(): Promise<void> {
+  if (!storageReadyPromise) {
+    storageReadyPromise = (async () => {
+      try {
+        await fs.promises.mkdir(appDataDir, { recursive: true });
+      } catch {}
+
+      // One-time safe historical migration from legacy storage directory ('developer-disk-cleaner')
+      try {
+        const legacyExists = await fs.promises.stat(legacyAppDataDir).then(() => true).catch(() => false);
+        if (legacyExists) {
+          const legacyHistory = path.join(legacyAppDataDir, 'history.json');
+          const targetHistory = path.join(appDataDir, 'history.json');
+          const [hasLegacyHist, hasTargetHist] = await Promise.all([
+            fs.promises.stat(legacyHistory).then(() => true).catch(() => false),
+            fs.promises.stat(targetHistory).then(() => true).catch(() => false)
+          ]);
+          if (hasLegacyHist && !hasTargetHist) {
+            try {
+              const raw = await fs.promises.readFile(legacyHistory, 'utf8');
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) {
+                await fs.promises.copyFile(legacyHistory, targetHistory);
+                console.log('[DevSweep] Migrated historical transactions from legacy storage to DevSweep');
+              }
+            } catch (migErr) {
+              console.error('[DevSweep] Legacy history migration skipped due to format:', migErr);
+            }
+          }
+
+          const legacyConfig = path.join(legacyAppDataDir, 'config.json');
+          const targetConfig = path.join(appDataDir, 'config.json');
+          const [hasLegacyCfg, hasTargetCfg] = await Promise.all([
+            fs.promises.stat(legacyConfig).then(() => true).catch(() => false),
+            fs.promises.stat(targetConfig).then(() => true).catch(() => false)
+          ]);
+          if (hasLegacyCfg && !hasTargetCfg) {
+            try {
+              const raw = await fs.promises.readFile(legacyConfig, 'utf8');
+              const parsed = JSON.parse(raw);
+              if (parsed && typeof parsed === 'object') {
+                await fs.promises.copyFile(legacyConfig, targetConfig);
+                console.log('[DevSweep] Migrated user settings from legacy storage to DevSweep');
+              }
+            } catch (migErr) {
+              console.error('[DevSweep] Legacy config migration skipped due to format:', migErr);
+            }
+          }
         }
+      } catch (err) {
+        console.error('[DevSweep] Storage preparation error:', err);
       }
-      return {
-        userProtectedPaths: protectedPaths,
-        historyRetention: retention
-      };
-    }
-  } catch {}
-  return { userProtectedPaths: [], historyRetention: DEFAULT_RETENTION_CONFIG };
+    })();
+  }
+  return storageReadyPromise;
 }
 
-function saveConfig(cfg: AppConfig) {
-  try {
-    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2), 'utf8');
-  } catch {}
+// --------------------------------------------------------------------------
+// Asynchronous, Cached Config & History Hydration
+// --------------------------------------------------------------------------
+let configCache: AppConfig | null = null;
+let configPromise: Promise<AppConfig> | null = null;
+
+async function getConfig(): Promise<AppConfig> {
+  if (configCache) return configCache;
+  if (!configPromise) {
+    configPromise = (async () => {
+      await ensureStorageReady();
+      try {
+        const raw = await fs.promises.readFile(configPath, 'utf8');
+        const parsed = JSON.parse(raw);
+        const protectedPaths = Array.isArray(parsed?.userProtectedPaths) ? parsed.userProtectedPaths : [];
+        let retention = DEFAULT_RETENTION_CONFIG;
+        if (parsed?.historyRetention) {
+          const validation = validateRetentionConfig(parsed.historyRetention);
+          if (validation.valid && validation.config) {
+            retention = validation.config;
+          }
+        }
+        configCache = {
+          userProtectedPaths: protectedPaths,
+          historyRetention: retention
+        };
+      } catch {
+        configCache = { userProtectedPaths: [], historyRetention: DEFAULT_RETENTION_CONFIG };
+      }
+      return configCache;
+    })();
+  }
+  return configPromise;
 }
 
-function loadHistory(): CleanupTransaction[] {
+async function saveConfig(cfg: AppConfig): Promise<void> {
+  configCache = cfg;
+  await ensureStorageReady();
   try {
-    if (fs.existsSync(historyPath)) {
-      return JSON.parse(fs.readFileSync(historyPath, 'utf8'));
-    }
-  } catch {}
-  return [];
+    await fs.promises.writeFile(configPath, JSON.stringify(cfg, null, 2), 'utf8');
+  } catch (err) {
+    console.error('[DevSweep] Failed to save config:', err);
+  }
 }
 
-async function saveHistory(history: CleanupTransaction[]) {
+let historyCache: CleanupTransaction[] | null = null;
+let historyPromise: Promise<CleanupTransaction[]> | null = null;
+
+async function getHistoryList(): Promise<CleanupTransaction[]> {
+  if (historyCache !== null) return historyCache;
+  if (!historyPromise) {
+    historyPromise = (async () => {
+      await ensureStorageReady();
+      try {
+        const raw = await fs.promises.readFile(historyPath, 'utf8');
+        const parsed = JSON.parse(raw);
+        historyCache = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        historyCache = [];
+      }
+      return historyCache;
+    })();
+  }
+  return historyPromise;
+}
+
+async function saveHistory(history: CleanupTransaction[]): Promise<void> {
+  historyCache = history;
+  await ensureStorageReady();
+  const cfg = await getConfig();
+  const retentionConfig = cfg.historyRetention || DEFAULT_RETENTION_CONFIG;
+  let toPersist = history;
+
+  if (retentionConfig.autoPruneOnSave) {
+    const { prunedHistory } = pruneHistoryRecords(history, {
+      maxRecords: retentionConfig.maxRecords,
+      maxAgeDays: retentionConfig.maxAgeDays
+    });
+    toPersist = prunedHistory;
+    historyCache.length = 0;
+    historyCache.push(...toPersist);
+  }
+
+  const tempPath = `${historyPath}.tmp.${Date.now()}`;
   try {
-    const retentionConfig = config.historyRetention || DEFAULT_RETENTION_CONFIG;
-    let toPersist = history;
-    if (retentionConfig.autoPruneOnSave) {
-      const { prunedHistory } = pruneHistoryRecords(history, {
-        maxRecords: retentionConfig.maxRecords,
-        maxAgeDays: retentionConfig.maxAgeDays
-      });
-      toPersist = prunedHistory;
-      // Synchronize in-memory historyList with pruned list
-      historyList.length = 0;
-      historyList.push(...toPersist);
-    }
-    const tempPath = `${historyPath}.tmp.${Date.now()}`;
     await fs.promises.writeFile(tempPath, JSON.stringify(toPersist, null, 2), 'utf8');
     await fs.promises.rename(tempPath, historyPath);
   } catch {
     try {
-      fs.writeFileSync(historyPath, JSON.stringify(history, null, 2), 'utf8');
+      await fs.promises.writeFile(historyPath, JSON.stringify(toPersist, null, 2), 'utf8');
     } catch {}
   }
 }
 
-const config = loadConfig();
-const historyList = loadHistory();
-
-// Initialize Services
-const protectedService = new ProtectedPathService(config.userProtectedPaths);
+// --------------------------------------------------------------------------
+// Services Initialization
+// --------------------------------------------------------------------------
+const protectedService = new ProtectedPathService([]);
 const sessionManager = new SessionManager();
 const safetyEngine = new SafetyEngine(protectedService, sessionManager);
 const ruleRegistry = new RuleRegistry();
 const cleanupExecutor = new CleanupExecutor(safetyEngine, ruleRegistry);
 const directoryScanner = new DirectoryScanner(protectedService);
+
+async function syncProtectedPathsFromConfig(): Promise<void> {
+  const cfg = await getConfig();
+  for (const p of cfg.userProtectedPaths) {
+    protectedService.addUserProtectedPath(p);
+  }
+}
 
 let mainWindow: BrowserWindow | null = null;
 let activeScanAbortController: AbortController | null = null;
@@ -173,7 +241,13 @@ function createWindow() {
     path.join(__dirname, '../../public/icon.png'),
     path.join(appRoot, 'dist/icon.png')
   ];
-  const resolvedIcon = iconCandidates.find((p) => fs.existsSync(p));
+  const resolvedIcon = iconCandidates.find((p) => {
+    try {
+      return fs.existsSync(p);
+    } catch {
+      return false;
+    }
+  });
 
   mainWindow = new BrowserWindow({
     title: 'DevSweep',
@@ -191,6 +265,8 @@ function createWindow() {
       sandbox: true
     }
   });
+
+  perf.mark('window-created');
 
   // Block opening arbitrary new windows
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -234,11 +310,23 @@ function dispatchNativeNotification(payload: NativeNotificationPayload) {
 }
 
 app.whenReady().then(() => {
+  perf.mark('app-ready');
+
   if (process.platform === 'win32') {
     app.setAppUserModelId('com.devsweep.app');
   }
 
   createWindow();
+
+  // Non-blocking async background hydration: prepare storage, cache config and history
+  ensureStorageReady()
+    .then(() => {
+      getConfig().then(() => syncProtectedPathsFromConfig());
+      getHistoryList();
+    })
+    .catch((err) => {
+      console.error('[DevSweep] Background hydration error:', err);
+    });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -293,6 +381,9 @@ ipcMain.handle('scan:start', async (event, rawPayload) => {
     throw new Error(`Invalid scan payload: ${parseResult.error.message}`);
   }
 
+  // Ensure user protected paths are synced before scan starts
+  await syncProtectedPathsFromConfig();
+
   // Cancel and unpause any existing running scan
   if (activeScanAbortController) {
     activePauseController.resume();
@@ -305,6 +396,12 @@ ipcMain.handle('scan:start', async (event, rawPayload) => {
   const rules = ruleRegistry.getAllRules();
   const allScannedItems: ScannedItem[] = [];
   const totalRules = rules.length;
+
+  const progressEmitter = createThrottledProgressEmitter<any>((progress) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('scan:progress', progress);
+    }
+  });
 
   for (let ruleIdx = 0; ruleIdx < totalRules; ruleIdx++) {
     const rule = rules[ruleIdx];
@@ -323,8 +420,10 @@ ipcMain.handle('scan:start', async (event, rawPayload) => {
         abortSignal: activeScanAbortController.signal,
         pauseController: activePauseController,
         onProgress: (progress: any) => {
-          if (!mainWindow?.isDestroyed()) {
-            mainWindow?.webContents.send('scan:progress', progress);
+          if (progress.status === 'PAUSED' || progress.status === 'CANCELLED') {
+            progressEmitter.sendTerminal(progress);
+          } else {
+            progressEmitter.sendProgress(progress);
           }
         }
       });
@@ -339,21 +438,20 @@ ipcMain.handle('scan:start', async (event, rawPayload) => {
   const isCancelled = activeScanAbortController.signal.aborted;
   const totalScannedBytes = allScannedItems.reduce((acc, it) => acc + it.size, 0);
 
-  if (!mainWindow?.isDestroyed()) {
-    mainWindow?.webContents.send('scan:progress', {
-      scanSessionId: session.id,
-      status: isCancelled ? 'CANCELLED' : 'COMPLETED',
-      currentRuleIndex: totalRules,
-      totalRules,
-      scannedFiles: allScannedItems.reduce((acc, it) => acc + it.fileCount, 0),
-      scannedBytes: totalScannedBytes,
-      estimatedReclaimableBytes: totalScannedBytes,
-      filesPerSecond: 0,
-      bytesPerSecond: 0,
-      elapsedTimeMs: 0,
-      estimatedRemainingTimeMs: 0
-    });
-  }
+  // Guaranteed terminal delivery superseding any pending throttled progress
+  progressEmitter.sendTerminal({
+    scanSessionId: session.id,
+    status: isCancelled ? 'CANCELLED' : 'COMPLETED',
+    currentRuleIndex: totalRules,
+    totalRules,
+    scannedFiles: allScannedItems.reduce((acc, it) => acc + it.fileCount, 0),
+    scannedBytes: totalScannedBytes,
+    estimatedReclaimableBytes: totalScannedBytes,
+    filesPerSecond: 0,
+    bytesPerSecond: 0,
+    elapsedTimeMs: 0,
+    estimatedRemainingTimeMs: 0
+  });
 
   // Dispatch completion notification respecting background state
   dispatchNativeNotification(
@@ -390,9 +488,14 @@ ipcMain.handle('scan:cancel', async (event, rawPayload) => {
 
 // Shell reveal in explorer
 ipcMain.handle('shell:reveal', async (event, itemPath) => {
-  if (typeof itemPath === 'string' && fs.existsSync(itemPath)) {
-    shell.showItemInFolder(itemPath);
-    return true;
+  if (typeof itemPath === 'string') {
+    try {
+      const exists = await fs.promises.stat(itemPath).then(() => true).catch(() => false);
+      if (exists) {
+        shell.showItemInFolder(itemPath);
+        return true;
+      }
+    } catch {}
   }
   return false;
 });
@@ -420,15 +523,15 @@ ipcMain.handle('path:validate', async (event, pathStr: string) => {
     return { valid: false, exists: false, isDirectory: false, message: 'Path must be an absolute Windows path (e.g. C:\\Projects)' };
   }
   try {
-    if (!fs.existsSync(trimmed)) {
-      return { valid: false, exists: false, isDirectory: false, message: 'Directory does not exist' };
-    }
     const stat = await fs.promises.stat(trimmed);
     if (!stat.isDirectory()) {
       return { valid: false, exists: true, isDirectory: false, message: 'Path is a file, not a directory' };
     }
     return { valid: true, exists: true, isDirectory: true, message: 'Valid existing directory' };
   } catch (err: any) {
+    if (err?.code === 'ENOENT') {
+      return { valid: false, exists: false, isDirectory: false, message: 'Directory does not exist' };
+    }
     if (err?.code === 'EACCES' || err?.code === 'EPERM') {
       return { valid: false, exists: true, isDirectory: false, message: 'Access denied by Windows security policy' };
     }
@@ -462,6 +565,12 @@ ipcMain.handle('cleanup:execute', async (event, rawPayload) => {
     }
   }
 
+  const cleanupEmitter = createThrottledProgressEmitter<any>((prog) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('cleanup:progress', prog);
+    }
+  });
+
   isCleanupActive = true;
   try {
     const tx = await cleanupExecutor.execute({
@@ -473,11 +582,15 @@ ipcMain.handle('cleanup:execute', async (event, rawPayload) => {
       abortSignal: activeCleanupAbortController.signal,
       pauseController: activeCleanupPauseController,
       onProgress: (prog) => {
-        if (!mainWindow?.isDestroyed()) {
-          mainWindow?.webContents.send('cleanup:progress', prog);
+        if (prog.status === 'COMPLETED' || prog.status === 'CANCELLED' || prog.status === 'FAILED') {
+          cleanupEmitter.sendTerminal(prog);
+        } else {
+          cleanupEmitter.sendProgress(prog);
         }
       }
     });
+
+    cleanupEmitter.flush();
 
     if (!dryRun) {
       // Enrich transaction with item-level audit metadata directly from sessionManager
@@ -532,6 +645,7 @@ ipcMain.handle('cleanup:execute', async (event, rawPayload) => {
         tx.safetyLevel = itemAuditList[0].safetyLevel;
       }
 
+      const historyList = await getHistoryList();
       historyList.push(tx);
       await saveHistory(historyList);
     }
@@ -567,6 +681,7 @@ ipcMain.handle('cleanup:cancel', async () => {
 
 // Protected paths management
 ipcMain.handle('protected-paths:get', async () => {
+  await syncProtectedPathsFromConfig();
   return protectedService.getUserProtectedPaths();
 });
 
@@ -574,24 +689,26 @@ ipcMain.handle('protected-paths:add', async (event, rawPayload) => {
   const parseResult = AddProtectedPathSchema.safeParse(rawPayload);
   if (!parseResult.success) throw new Error('Invalid path payload');
 
+  const cfg = await getConfig();
   protectedService.addUserProtectedPath(parseResult.data.path);
-  config.userProtectedPaths = protectedService.getUserProtectedPaths();
-  saveConfig(config);
-  return config.userProtectedPaths;
+  cfg.userProtectedPaths = protectedService.getUserProtectedPaths();
+  await saveConfig(cfg);
+  return cfg.userProtectedPaths;
 });
 
 ipcMain.handle('protected-paths:remove', async (event, rawPayload) => {
   const parseResult = RemoveProtectedPathSchema.safeParse(rawPayload);
   if (!parseResult.success) throw new Error('Invalid path payload');
 
+  const cfg = await getConfig();
   protectedService.removeUserProtectedPath(parseResult.data.path);
-  config.userProtectedPaths = protectedService.getUserProtectedPaths();
-  saveConfig(config);
-  return config.userProtectedPaths;
+  cfg.userProtectedPaths = protectedService.getUserProtectedPaths();
+  await saveConfig(cfg);
+  return cfg.userProtectedPaths;
 });
 
 ipcMain.handle('history:get', async () => {
-  return historyList;
+  return getHistoryList();
 });
 
 ipcMain.handle('history:export-file', async (event, payload) => {
@@ -628,7 +745,8 @@ ipcMain.handle('history:export-file', async (event, payload) => {
 
 // History retention management
 ipcMain.handle('history:get-retention-config', async () => {
-  return config.historyRetention || DEFAULT_RETENTION_CONFIG;
+  const cfg = await getConfig();
+  return cfg.historyRetention || DEFAULT_RETENTION_CONFIG;
 });
 
 ipcMain.handle('history:save-retention-config', async (event, payload) => {
@@ -636,17 +754,19 @@ ipcMain.handle('history:save-retention-config', async (event, payload) => {
   if (!validation.valid || !validation.config) {
     return { success: false, error: validation.error || 'Invalid retention configuration' };
   }
-  config.historyRetention = validation.config;
-  saveConfig(config);
-  // Invariant: Saving retention configuration does NOT trigger an automatic purge of existing history.
-  return { success: true, config: config.historyRetention };
+  const cfg = await getConfig();
+  cfg.historyRetention = validation.config;
+  await saveConfig(cfg);
+  return { success: true, config: cfg.historyRetention };
 });
 
 ipcMain.handle('history:prune', async () => {
   if (isCleanupActive) {
     return { success: false, error: 'Cannot prune history while a cleanup is in progress' };
   }
-  const retention = config.historyRetention || DEFAULT_RETENTION_CONFIG;
+  const historyList = await getHistoryList();
+  const cfg = await getConfig();
+  const retention = cfg.historyRetention || DEFAULT_RETENTION_CONFIG;
   const { prunedHistory, prunedCount } = pruneHistoryRecords(historyList, {
     maxRecords: retention.maxRecords,
     maxAgeDays: retention.maxAgeDays
@@ -661,16 +781,9 @@ ipcMain.handle('history:clear', async () => {
   if (isCleanupActive) {
     return { success: false, error: 'Cannot clear history while a cleanup is in progress' };
   }
+  const historyList = await getHistoryList();
   const clearedCount = historyList.length;
   historyList.length = 0;
-  try {
-    const tempPath = `${historyPath}.tmp.${Date.now()}`;
-    await fs.promises.writeFile(tempPath, JSON.stringify([], null, 2), 'utf8');
-    await fs.promises.rename(tempPath, historyPath);
-  } catch {
-    try {
-      fs.writeFileSync(historyPath, JSON.stringify([], null, 2), 'utf8');
-    } catch {}
-  }
+  await saveHistory(historyList);
   return { success: true, clearedCount };
 });
