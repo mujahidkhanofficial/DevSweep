@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Production builds & packaging outputs
+dist/
+dist-electron/
+release/
+
+# Scratch & temporary workspace files
+scratch/
+*.log
+.tempmediaStorage/
+
+# OS-generated files
+Thumbs.db
+.DS_Store
+
+# Environment and sensitive files
+.env
+.env.local
+.env.*.local
